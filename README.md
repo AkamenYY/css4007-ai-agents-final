@@ -1,3 +1,54 @@
+# ShortsPilot — AI agent for YouTube Shorts creators
+
+**Student project for CSS 4007 · Level C (tool-using agent) · Author: Madiyar Tokbergen**
+
+ShortsPilot helps a Shorts creator write titles, descriptions and hashtags, answer questions about the channel's real analytics (YouTube Studio CSV export), and check metadata for spam / deceptive patterns. The LLM chooses which tool a request needs. See [reports/proposal.md](reports/proposal.md) for the full design.
+
+### Status
+
+| Week | Done |
+|---|---|
+| 10 | Proposal |
+| 11 | OpenAI adapter with retries/timeouts, CLI with first working request, adapter tests |
+
+Tools (analytics, policy check) arrive in weeks 12–14.
+
+### Setup
+
+Requirements: Node.js 22+, an OpenAI API key. No npm packages are needed.
+
+```bash
+git clone https://github.com/AkamenYY/css4007-ai-agents-final.git
+cd css4007-ai-agents-final
+cp .env.example .env        # then put your key and model into .env
+npm start -- "Give me 3 title ideas for a Roblox Short where a boss can't find his egg"
+npm test                    # runs without an API key (the model is mocked)
+```
+
+`.env` example:
+
+```text
+LLM_API_KEY=sk-...
+LLM_MODEL=gpt-5-mini
+```
+
+### Project files
+
+| File | What it does |
+|---|---|
+| `src/model-client.mjs` | OpenAI Chat Completions adapter → `{text, toolCalls}`; retries on 429/5xx/timeouts (max 2), clear errors, never logs the key |
+| `src/assistant.mjs` | System prompt, input validation, first request |
+| `src/cli.mjs` | Command-line entry point, loads `.env` |
+| `tests/model-client.test.mjs` | Project tests with a mocked API |
+
+### AI assistance statement
+
+Claude (Anthropic) was used to help draft the proposal and generate the initial adapter, CLI and tests. I review, run and test all code, and I am responsible for understanding it.
+
+---
+
+*The course instructions from the instructor repository follow below.*
+
 # AI Agents — Final Project
 
 **CSS 4007 — Artificial Intelligence · Individual project · Your choice of topic**

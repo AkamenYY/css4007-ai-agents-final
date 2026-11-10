@@ -6,6 +6,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "start": "node src/cli.mjs",
     "test": "node --test tests/*.test.mjs",
     "validate": "node scripts/validate.mjs",
     "proposal": "node scripts/validate-proposal.mjs",
