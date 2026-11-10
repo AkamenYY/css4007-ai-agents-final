@@ -2,27 +2,24 @@
 
 ## Project Title
 
-**ShortsPilot** — a tool-using AI agent for YouTube Shorts creators.
+**ShortsPilot** — a simple tool-using AI agent for YouTube Shorts creators.
 
 ## Problem Description
 
-I run Roblox YouTube Shorts channels. Every upload repeats the same manual work:
+I make Roblox YouTube Shorts. Before each upload I repeat the same small tasks:
 
-1. Writing a title, description and hashtags for each video.
-2. Checking which past videos actually performed well, by digging through YouTube Studio tables by hand.
-3. Making sure the metadata does not look like spam. YouTube's *Spam & Deceptive Practices* policy can strike or terminate a channel for misleading titles, keyword stuffing, excessive tags or scam-like phrases such as "free Robux". Small creators rarely know the exact rules.
+1. I check which of my videos did best, to decide what to make next.
+2. I write a title and check that it is not "spammy". YouTube can strike a channel for misleading titles, scam phrases like "free Robux", or too many hashtags.
 
-General chatbots can write titles, but they cannot see the creator's real numbers, and they invent statistics. They also do not check the result against the policy.
+A normal chatbot cannot see my video numbers, so it invents them. It also cannot reliably check its own titles against rules.
 
-ShortsPilot answers questions about the creator's **real channel analytics**, using a CSV exported from YouTube Studio. It writes metadata for new videos and **checks that metadata with deterministic rules before suggesting it**. The LLM decides which tool a request needs. Answers about the channel are based only on tool results, never on invented numbers.
-
-This matters because metadata quality affects both reach and channel safety, and a single policy strike can cost a creator their income.
+ShortsPilot solves this with two small tools. One reads my real video data from a file. The other checks a title with fixed rules written in code. The LLM decides when a tool is needed, and its answer is based on the tool result instead of guesses.
 
 ## Target Users
 
-- Solo YouTube Shorts creators and small channel networks, especially in gaming and Roblox niches.
-- Video editors and assistants who prepare uploads for a creator.
-- Me: I will use it for my own channels.
+- Small YouTube Shorts creators, especially in the gaming and Roblox niche.
+- Editors who prepare titles for a creator.
+- Me: I will use it for my own channel.
 
 ## Selected Difficulty
 
@@ -30,117 +27,114 @@ C — Intermediate: a tool-using agent.
 
 ## Expected Functionality
 
-1. **Channel questions in natural language.** For example: "How did the channel do in October?" or "Which Shorts had the best retention?"
-2. **Analytics tools.** These read a YouTube Studio CSV export: totals for a date range, and top or bottom videos by a chosen metric.
-3. **Metadata generation.** Produces a title, description and hashtags for a new video idea as **validated JSON**.
-4. **Policy check tool.** A rule-based check of a title, description and tags. It flags spam and deceptive patterns: excessive hashtags, repeated keywords, scam phrases, ALL-CAPS, external links and length limits. The agent revises the metadata if issues are found.
-5. **No-tool answers.** General creator questions, such as "What is CTR?", are answered directly without calling a tool.
-6. **Robustness.** Tool arguments are validated, and missing data is handled (for example a date range with no videos, or a missing CSV). The app also handles API errors, timeouts and rate limits with bounded retries.
-7. **Tool execution log.** Every tool call is written to `logs/tool-calls.jsonl` with its time, tool name, validated arguments, result status and duration. API keys are never logged.
+1. The user asks a question in the command line, in plain language.
+2. The LLM decides:
+   - question about my videos → calls `get_video_stats`;
+   - "is this title OK?" → calls `check_title`;
+   - general question (for example "what is CTR?") → answers without a tool.
+3. My code validates the tool arguments, runs the tool, and sends the result back to the LLM.
+4. The LLM writes the final answer using only the tool result.
+5. **Title suggestions** with structured output: for a video idea the model returns JSON `{"titles": [...]}`, which my code validates.
+6. **Errors** are handled: invalid arguments, unknown tool, empty data, API failures or timeouts, and a limit on tool rounds.
+7. Every tool call is written to a log file `logs/tool-calls.jsonl`, without API keys.
 
 ## Proposed Functions
 
 | Function | Purpose | Input | Output | Dependencies |
 |---|---|---|---|---|
-| `complete(messages, tools)` | Provider adapter that sends a chat request to the OpenAI API | Chat messages; optional tool definitions | `{text, toolCalls: [{id, name, arguments}]}` | OpenAI Chat Completions API, `fetch`, `LLM_API_KEY`, `LLM_MODEL` |
-| `loadAnalytics(csvPath)` | Parse a YouTube Studio "Table data" CSV export into typed rows | Path to CSV | `[{videoId, title, publishedAt, durationSec, views, watchHours, subscribers, impressions, ctr, avgViewPct}]` | `node:fs` |
-| `get_channel_summary(start_date, end_date)` | Aggregate channel statistics for videos published in a period | ISO dates `YYYY-MM-DD` | `{videos, views, watchHours, subscribers, avgViewPct}` or `{error}` | `loadAnalytics` |
-| `find_top_videos(metric, limit, order)` | Rank videos by a metric | `metric` ∈ views / avg_view_pct / ctr / subscribers; `limit` 1–20; `order` best / worst | `[{title, publishedAt, value}]` | `loadAnalytics` |
-| `check_metadata_policy(title, description, tags)` | Deterministic spam and deceptive-metadata checker | Strings and an array of tags | `{ok, issues: [{rule, severity, message}]}` | none (pure function) |
-| `validateToolArgs(name, args)` | Reject malformed tool arguments before execution | Tool name, parsed arguments | List of errors (empty = valid) | Tool JSON schemas |
-| `validateMetadata(json)` | Validate the structured metadata output | Model output | Validated `{title, description, hashtags[]}` or an error | none |
-| `runAgent(request)` | Agent loop: LLM → tool selection → execution → LLM → answer, with a maximum number of tool rounds | User request string | `{answer, toolLog}` | `complete`, tools, logger |
-| `logToolCall(entry)` | Append one tool execution record | Entry object | Line in `logs/tool-calls.jsonl` | `node:fs` |
+| `complete(messages, tools)` | Send a request to the OpenAI API | chat messages, tool definitions | `{text, toolCalls}` | OpenAI API, `fetch`, `.env` |
+| `loadVideos()` | Read my video data | — | array of `{title, date, views, likes}` | `data/videos.json` |
+| `get_video_stats(sort_by, limit)` | **Tool.** Return my top videos | `sort_by` ∈ views / likes / date; `limit` 1–10 | list of videos | `loadVideos` |
+| `check_title(title)` | **Tool.** Check a title with simple rules | title string | `{ok, problems: [...]}` | none |
+| `validateArgs(toolName, args)` | Reject bad tool arguments before running a tool | tool name, arguments | list of errors | none |
+| `suggestTitles(idea)` | Ask the model for 3 titles as JSON and validate them | video idea | `{titles: [3 strings]}` | `complete` |
+| `runAgent(question)` | Agent loop: LLM → tool → LLM → answer (max 3 tool rounds) | user question | final answer | `complete`, tools |
+| `logToolCall(entry)` | Save one tool call to the log | `{time, tool, args, ok}` | line in log file | `node:fs` |
 
-Example signature:
+Rules inside `check_title`:
+- title is not empty and has at most 100 characters;
+- no scam or clickbait phrases ("free robux", "giveaway", "100% real");
+- at most 3 hashtags;
+- not written entirely in CAPITAL LETTERS.
+
+Example:
 
 ```js
-/** Ranks videos from the analytics export by a metric. */
-export function findTopVideos({metric, limit = 5, order = 'best'}) { /* ... */ }
+/** Returns my top videos sorted by a metric. */
+export function getVideoStats({sort_by, limit = 3}) { /* ... */ }
 ```
 
 ## Proposed Agent Tools
 
-These three functions are exposed to the LLM as callable tools. The model decides whether to call a tool, which one, and with which arguments; routing is not hard-coded.
+The LLM can call two tools. The model chooses them itself; there is no `if (question.includes(...))` routing in my code.
 
-1. **`get_channel_summary`**: the model cannot know the creator's real views, watch time or subscriber numbers. This tool gives it real totals for a period instead of hallucinated ones.
-2. **`find_top_videos`**: questions like "what worked best?" need sorting and filtering over the real data. Code does this exactly; an LLM would be unreliable.
-3. **`check_metadata_policy`**: an LLM alone cannot be trusted to verify its own output against policy rules. A deterministic checker gives verifiable feedback, and the agent uses it to revise titles and descriptions before presenting them.
-
-Requests that do not need data, such as general advice or definitions, are answered without tools.
+1. **`get_video_stats`**: the model does not know my real views and likes. Without this tool it would invent numbers.
+2. **`check_title`**: the rules must be checked exactly. Code is reliable; the model's own judgement is not.
 
 ## Model Selection
 
-- **Provider:** OpenAI API, Chat Completions endpoint with function calling (tools).
-- **Model:** a small, inexpensive model that supports tool calling, configured via `LLM_MODEL` in `.env` (for example `gpt-5-mini`). Changing the model requires no code changes.
-- **Runtime:** Node.js 22, with no external npm dependencies (built-in `fetch` and `node:test`).
-- **Secrets:** `LLM_API_KEY` lives in a local `.env` file, which is git-ignored; only `.env.example` is committed.
-- **Tests:** use a mocked model client, so they run without an API key and without cost.
+- **OpenAI API**, Chat Completions with function calling.
+- Model: a cheap model with tool support, for example `gpt-5-mini`. It is set in `.env` (`LLM_MODEL`), so it can be changed without code changes.
+- **Node.js 22** with no extra npm packages.
+- The API key is kept in `.env`, which is not committed to git.
+- Tests use a fake model, so they need no key and cost nothing.
 
 ## Architecture
 
 ```text
-             ┌──────────────────────────────────────────────┐
-User request │  CLI (src/cli.mjs)                           │
-────────────▶│  input validation                            │
-             └──────────────┬───────────────────────────────┘
-                            ▼
-             ┌──────────────────────────────┐   tool definitions
-             │  Agent loop (runAgent)       │──────────────────┐
-             │  max tool rounds, retries    │                  ▼
-             └──────┬───────────────▲───────┘        ┌───────────────────┐
-                    │ messages      │ text /         │ OpenAI API        │
-                    ▼               │ tool calls     │ (model-client)    │
-             ┌──────────────────────┴───────┐        └───────────────────┘
-             │ Tool dispatcher              │
-             │  1. validate arguments       │──▶ logs/tool-calls.jsonl
-             │  2. execute tool             │
-             │  3. return result to LLM     │
-             └──┬───────────┬───────────┬───┘
-                ▼           ▼           ▼
-      get_channel_summary  find_top_videos  check_metadata_policy
-                └─────┬─────┘                (pure rules)
-                      ▼
-          data/analytics.csv (YouTube Studio export)
+User question (CLI)
+      │
+      ▼
+  runAgent ──── messages + tool list ────▶ OpenAI model
+      ▲                                        │
+      │                       text answer  or  tool call
+      │                                        ▼
+      │                            validateArgs (reject bad input)
+      │                                        │
+      │                       get_video_stats  │  check_title
+      │                     (data/videos.json) │  (rules in code)
+      │                                        ▼
+      └──────── tool result ◀──────── logToolCall → logs/
+      │
+      ▼
+Final answer (max 3 tool rounds)
 ```
 
-Flow: **User Request → LLM → Tool Selection → Argument Validation → Tool Execution → LLM → Validated Answer**.
+Flow: **User Request → LLM → Tool Selection → Tool Execution → LLM → Answer**
 
 ## Example Requests
 
-1. "Which 5 of my Shorts have the best average percentage viewed?" → `find_top_videos(metric="avg_view_pct", limit=5)`
-2. "How did the channel do from 1 to 31 October 2026?" → `get_channel_summary("2026-10-01", "2026-10-31")`
-3. "Write a title, description and hashtags for a Roblox Short where a boss can't find his hidden egg, and make sure it isn't spammy." → model drafts metadata → `check_metadata_policy` → revises if issues are found → validated JSON
-4. "What is a good length for a Short?" → no tool call; direct answer.
-5. "Show my stats for 2030." → tool returns no videos for that period → the agent says the data is unavailable instead of inventing numbers.
+1. "Which 3 of my videos have the most views?" → `get_video_stats(sort_by="views", limit=3)`
+2. "Is this title OK: 'FREE ROBUX GIVEAWAY #roblox #fyp #shorts #viral'?" → `check_title(...)` → explains the problems
+3. "What is CTR on YouTube?" → no tool, direct answer
+4. "Give me 3 titles for a video where a boss can't find his hidden egg" → structured JSON titles
+5. "Show my top 50 videos" → limit is too big → the agent explains or uses the maximum of 10
 
 ## Evaluation Plan
 
-**Automated tests** (`node --test`, at least 8 project tests, mocked LLM so they are reproducible):
+At least **8 automated tests** with `node --test` and a fake model:
 
-1. Adapter: converts tool definitions and parses tool calls and text from an API response.
-2. Adapter: retries on 429/5xx and timeouts, stops after the retry budget, and gives a clear error without leaking the key.
-3. CSV parsing of a sample YouTube Studio export, including the totals row and malformed rows.
-4. `get_channel_summary` arithmetic on known data, and an empty period.
-5. `find_top_videos` sorting, limit bounds and invalid metric rejection.
-6. `check_metadata_policy` flags each rule and passes clean metadata.
-7. Agent loop: a scripted mock model selects a tool → the tool is executed → the result is passed back → final answer.
-8. Agent loop: a request without tools gets a direct answer.
-9. Agent loop: invalid or unknown tool arguments are rejected before execution, and the error is returned to the model.
-10. Agent loop: a failing tool and the maximum-rounds limit are handled without crashing.
-11. Structured metadata output validation (valid and malformed JSON).
+1. The adapter parses text and tool calls from an API response.
+2. The adapter retries on rate limit or timeout and does not leak the API key.
+3. `get_video_stats` sorts correctly and respects `limit`.
+4. `check_title` finds each problem and accepts a good title.
+5. `validateArgs` rejects bad arguments (wrong `sort_by`, `limit` = 0 or 50, empty title).
+6. The agent calls the tool the model chose and passes the result back.
+7. The agent answers without tools when the model gives no tool call.
+8. Unknown tool, failing tool and too many tool rounds are handled without a crash.
+9. `suggestTitles` accepts valid JSON and rejects broken JSON.
 
-**Manual evaluation with the real model:** a fixed set of about 12 requests (tool and no-tool, valid and invalid, missing data). For each I will record which tool was selected, whether the arguments were correct, whether the answer matches the tool result (no invented numbers), and whether errors were handled. Results go in the Week 16 report.
+**Manual check with the real model:** 10 questions, recording which tool was chosen and whether the answer matches the data. Results go in the Week 16 report.
 
 ## Weekly Milestones
 
 | Week | Dates | Plan |
 |---|---|---|
-| 10 | 02–08 Nov | Fork the repository, choose the topic and level, write this proposal. |
-| 11 | 09–15 Nov | OpenAI adapter (`src/model-client.mjs`) with error handling and retries; CLI with a first working request; setup documentation; first adapter tests. |
-| 12 | 16–22 Nov | CSV loader for YouTube Studio exports with a sample dataset; analytics functions; structured JSON metadata output with validation; core tests. |
-| 13 | 23–29 Nov | Register the three tools with the LLM; tool argument validation; tool dispatcher; demonstrate real tool selection and execution. |
-| 14 | 30 Nov–06 Dec | Complete the tool-calling loop (multiple tool rounds, results passed back to the model); tool error handling; tool execution logs. |
-| 15 | 07–13 Dec | Reliability: missing data, invalid arguments, API failures, round limits; expand tests to 8 or more. |
-| 16 | 14–20 Dec | Run the full test suite and the manual evaluation set; analyse failures; improve prompts and validation; update documentation. |
-| 17 | 21–22 Dec | Final README, test results, final report, commit hash, demonstration and defense. |
+| 10 | 02–08 Nov | Topic, level and proposal. |
+| 11 | 09–15 Nov | OpenAI connection, first working answer in the CLI, first tests. |
+| 12 | 16–22 Nov | `data/videos.json`, `get_video_stats` and `check_title` as normal functions, `suggestTitles` with JSON validation, tests. |
+| 13 | 23–29 Nov | Register both tools with the LLM; the model chooses the tool; argument validation. |
+| 14 | 30 Nov–06 Dec | Full agent loop (result back to the LLM), tool error handling, tool log file. |
+| 15 | 07–13 Dec | Edge cases (empty data, bad input, API down, round limit); at least 8 tests. |
+| 16 | 14–20 Dec | Run all tests and the 10 manual questions; fix problems; update the README. |
+| 17 | 21–22 Dec | Final report, commit hash, demonstration and defense. |

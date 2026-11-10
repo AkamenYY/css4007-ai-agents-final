@@ -39,4 +39,4 @@ The user asks a question from the command line, for example `npm start -- "Give 
 
 ## Next Week
 
-Week 12: add a sample YouTube Studio CSV export and a CSV loader; implement the analytics functions (`get_channel_summary`, `find_top_videos`); add structured JSON metadata output with validation; add core tests.
+Week 12: add `data/videos.json`; implement `get_video_stats` and `check_title` as normal functions; add `suggestTitles` with JSON output validation; add core tests.

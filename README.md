@@ -2,7 +2,7 @@
 
 **Student project for CSS 4007 · Level C (tool-using agent) · Author: Madiyar Tokbergen**
 
-ShortsPilot helps a Shorts creator write titles, descriptions and hashtags, answer questions about the channel's real analytics (YouTube Studio CSV export), and check metadata for spam / deceptive patterns. The LLM chooses which tool a request needs. See [reports/proposal.md](reports/proposal.md) for the full design.
+ShortsPilot answers a Shorts creator's questions about their videos and checks titles for spam patterns. It has two tools: `get_video_stats` reads video data from `data/videos.json`, and `check_title` checks a title with fixed rules. The LLM chooses which tool a request needs, or answers directly when no tool is needed. See [reports/proposal.md](reports/proposal.md) for the full design.
 
 ### Status
 
@@ -11,7 +11,7 @@ ShortsPilot helps a Shorts creator write titles, descriptions and hashtags, answ
 | 10 | Proposal |
 | 11 | OpenAI adapter with retries/timeouts, CLI with first working request, adapter tests |
 
-Tools (analytics, policy check) arrive in weeks 12–14.
+Tools (`get_video_stats`, `check_title`) arrive in weeks 12–14. No YouTube API key is needed.
 
 ### Setup
 
