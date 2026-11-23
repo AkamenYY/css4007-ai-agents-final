@@ -10,8 +10,9 @@ ShortsPilot answers a Shorts creator's questions about their videos and checks t
 |---|---|
 | 10 | Proposal |
 | 11 | OpenAI adapter with retries/timeouts, CLI with first working request, adapter tests |
+| 12 | `data/videos.json`, `get_video_stats` and `check_title` functions, 3 titles as validated JSON, more tests |
 
-Tools (`get_video_stats`, `check_title`) arrive in weeks 12–14. No YouTube API key is needed.
+The functions become LLM-callable tools in weeks 13–14. No YouTube API key is needed.
 
 ### Setup
 
@@ -22,6 +23,9 @@ git clone https://github.com/AkamenYY/css4007-ai-agents-final.git
 cd css4007-ai-agents-final
 cp .env.example .env        # then put your key and model into .env
 npm start -- "Give me 3 title ideas for a Roblox Short where a boss can't find his egg"
+npm start -- titles "boss can't find his egg"   # 3 titles as validated JSON
+npm start -- stats views 3                      # top videos (no LLM needed)
+npm start -- check "FREE ROBUX #a #b #c #d"     # title rule check (no LLM needed)
 npm test                    # runs without an API key (the model is mocked)
 ```
 
@@ -39,6 +43,10 @@ LLM_MODEL=gpt-5-mini
 | `src/model-client.mjs` | OpenAI Chat Completions adapter → `{text, toolCalls}`; retries on 429/5xx/timeouts (max 2), clear errors, never logs the key |
 | `src/assistant.mjs` | System prompt, input validation, first request |
 | `src/cli.mjs` | Command-line entry point, loads `.env` |
+| `src/tools.mjs` | `loadVideos`, `getVideoStats` (sort + limit), `checkTitle` (4 rules) |
+| `src/titles.mjs` | `suggestTitles`: model returns JSON with 3 titles, `parseTitles` validates it |
+| `data/videos.json` | Sample video data (synthetic numbers) |
+| `tests/tools.test.mjs` | Tests for data loading, stats, title rules and JSON output |
 | `tests/model-client.test.mjs` | Project tests with a mocked API |
 
 ### AI assistance statement
